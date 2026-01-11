@@ -1,0 +1,10 @@
+{
+  "code-runner.executorMap": {
+    "c": "python $workspaceRoot/run.py $fullFileName",
+    "cpp": "python $workspaceRoot/run.py $fullFileName"
+  },
+  "code-runner.runInTerminal": true,
+  "code-runner.clearPreviousOutput": true,
+  "code-runner.saveFileBeforeRun": true,
+  "code-runner.preserveFocus": false
+}
