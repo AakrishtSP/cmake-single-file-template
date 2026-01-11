@@ -46,3 +46,6 @@ cmake-build-*/
 .vscode/
 *.log
 *.tmp
+
+!.vscode/settings.json
+# Keep settings.json under version control
