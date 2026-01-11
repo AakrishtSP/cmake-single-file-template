@@ -75,31 +75,31 @@ def is_multi_config(generator: str) -> bool:
     return "multi-config" in name or "visual studio" in name
 
 
-def configure_build(generator: str, log_file: Path, build_config: str, extra_args: list[str]) -> None:
+def configure_build(generator: str | None, log_file: Path, build_config: str, extra_args: list[str]) -> None:
     cmd = [
         "cmake",
         "-S",
         ".",
         "-B",
         "build",
-        "-G",
-        generator,
-        "-Wno-dev",
     ]
+    if generator:
+        cmd.extend(["-G", generator])
+    cmd.append("-Wno-dev")
     # Only pass a config to single-config generators
-    if not is_multi_config(generator):
+    if not generator or not is_multi_config(generator):
         cmd.extend(["-DCMAKE_BUILD_TYPE=" + build_config])
     # Pass any additional user-specified CMake configure args
     if extra_args:
         cmd.extend(extra_args)
     with log_file.open("a", encoding="utf-8") as log:
-        log.write(f"Configuring with generator: {generator}\n")
+        log.write(f"Configuring with generator: {generator or 'default'}\n")
         subprocess.run(cmd, check=True, stdout=log, stderr=log)
 
 
-def build_target(target: str, generator: str, log_file: Path, build_config: str, extra_args: list[str]) -> None:
+def build_target(target: str, generator: str | None, log_file: Path, build_config: str, extra_args: list[str]) -> None:
     cmd = ["cmake", "--build", "build", "--target", target]
-    if is_multi_config(generator):
+    if generator and is_multi_config(generator):
         cmd.extend(["--config", build_config])
     # Pass any additional user-specified CMake build args
     if extra_args:
@@ -128,10 +128,10 @@ def direct_compile(file_path: str, compiler: str, log_file: Path, is_c: bool) ->
     return output
 
 
-def exe_path(target: str, generator: str) -> Path:
+def exe_path(target: str, generator: str | None, build_config: str) -> Path:
     base = Path("build")
-    if is_multi_config(generator):
-        base = base / DEFAULT_CONFIG
+    if generator and is_multi_config(generator):
+        base = base / build_config
     suffix = ".exe" if os.name == "nt" else ""
     return base / f"{target}{suffix}"
 
@@ -202,12 +202,9 @@ def main() -> None:
         try:
             file_abs_temp.relative_to(project_root_temp)
             target_temp = normalize_target_in_project(file_abs_temp, project_root_temp)
-            # Determine which generator would be used to know the binary path
-            gen_temp = parsed.generator or choose_generator(PREFERRED_GENERATORS)
-            if gen_temp:
-                print(str(exe_path(target_temp, gen_temp).resolve()))
-            else:
-                print("(no generator available)")
+            # Use manual generator if specified, otherwise None for default
+            gen_temp = parsed.generator
+            print(str(exe_path(target_temp, gen_temp, build_config).resolve()))
         except ValueError:
             print("(file outside project)")
         sys.exit(0)
@@ -239,9 +236,7 @@ def main() -> None:
                 fail_with_log(f"Compilation failed with exit code {err.returncode}. Logs at {LOG_FILE}.", LOG_FILE, err.returncode)
         else:
             target = normalize_target_in_project(file_abs, project_root)
-            generator = parsed.generator or choose_generator(PREFERRED_GENERATORS)
-            if not generator:
-                fail("No suitable CMake generator found. Tried: " + ", ".join(PREFERRED_GENERATORS))
+            generator = parsed.generator  # Use manual selection only, None means CMake default
 
             try:
                 configure_build(generator, LOG_FILE, build_config, parsed.cmake_arg)
@@ -249,7 +244,7 @@ def main() -> None:
             except subprocess.CalledProcessError as err:
                 fail_with_log(f"CMake failed with exit code {err.returncode}. Logs at {LOG_FILE}.", LOG_FILE, err.returncode)
 
-            binary = exe_path(target, generator)
+            binary = exe_path(target, generator, build_config)
             if not binary.exists():
                 fail(f"Built binary not found at {binary}")
 
